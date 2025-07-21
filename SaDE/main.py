@@ -1,4 +1,14 @@
 from SaDE_DEAP import *
+from benchmark import *
 from evaluation import *
 
-s = SaDE(EVALUATION_FUNCTION=evaluate, const_LP=50, POP_SIZE=200, MAX_GEN=2000, HOF=True, STATISTICAL_LOG=True, GEN_SAVE=True, SEED=1234)
+s = SaDE(
+    EVALUATION_FUNCTION=neut_bac_model,
+    const_LP=60,
+    POP_SIZE=200,
+    MAX_GEN=5000,
+    STATISTICAL_LOG=True,
+    HOF_SIZE=100,
+    GEN_SAVE=True,
+    BOUNDS=[(1e-5, 1e0), (1e-5, 1e0), (1e-5, 1e0), (1e-5, 1e0), (1e-5, 1e0), (1e-5, 1e0)]
+)

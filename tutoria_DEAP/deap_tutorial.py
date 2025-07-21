@@ -19,7 +19,7 @@ from mut_cross import *
 
 # Configuração da execução do algoritmo
 config_seed = 1234
-pop_size = 256
+pop_size = 10
 gen_number = 2000
 parallel_computing = False
 bounds = [(1e-5, 9.5e-1), (1e-5, 9.5e-1), (1e-5, 9.5e-1), (1e-5, 9.5e-1), (1e-5, 9.5e-1), (1e-5, 9.5e-1)]
@@ -64,6 +64,14 @@ for smp in sample:
 for pos, ind in enumerate(pop_SaDE):
     ind.fitness.values = evaluate(ind)
 
+print(pop_SaDE)
+print("\n\n")
+test = pop_SaDE.copy()
+print(test)
+print("\n\n")
+print(pop_SaDE[0].fitness.values)
+print(test[0].fitness.values)
+print("\n\n")
 
 # Usando o toolbox 
 # Registrando o toolbox
@@ -103,3 +111,29 @@ print(idv3.fitness.valid)
 # Selectionar individuos que ainda não foram avaliados
 invalid_idv = [idv for idv in pop_SaDE if not idv.fitness.valid]
 print(invalid_idv)
+
+print("\n\n\n")
+
+bounds = [(0.10, 0.20), (1.5, 1.9), (0.01, 0.15), (0, 0.13), (0.1, 0.25), (0.5, 0.6)]
+l_bounds = [i[0] for i in bounds]
+u_bounds = [i[1] for i in bounds]
+
+def bound_maker(offspring):
+    for pos, par in enumerate(offspring):
+        print(par)
+        par = (l_bounds[pos]) + par * (u_bounds[pos] - l_bounds[pos])
+        print(par)
+        offspring[pos] = par
+
+idv0 = (creator.Individual([0, 1, -3, -4, 9, -1]))
+
+print(idv3)
+print("\n\n\n")
+bound_maker(offspring=idv0)
+print("\n\n\n")
+print("\n\n\n")
+print("\n\n\n")
+print("\n\n\n")
+print(idv3)
+a = idv3[0]
+print(idv3[0])
