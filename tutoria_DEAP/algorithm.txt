@@ -1,0 +1,120 @@
+Com certeza. Aqui está o guia em formato de pseudo-código, focado apenas na estrutura e na lógica para você mesmo implementar, sem o código Python completo.
+
+Este é o esqueleto do que você precisa construir.
+
+-----
+
+### **Guia em Pseudo-código para Implementação do SaDE**
+
+```
+//======================================================================
+// FASE 1: INICIALIZAÇÃO (Antes de tudo)
+//======================================================================
+
+// Define os parâmetros do SaDE
+CONSTANTE LP = 50       // Período de Aprendizagem
+CONSTANTE NUM_ESTRATEGIAS = 4
+
+// Define o conjunto de estratégias de mutação
+conjunto_de_estrategias = [funcao_rand_1, funcao_rand_to_best_2, funcao_rand_2, funcao_current_to_rand_1]
+
+// Inicializa as estruturas de dados para adaptação
+probabilidades_estrategias = [0.25, 0.25, 0.25, 0.25]
+contadores_sucesso = [0, 0, 0, 0]
+contadores_falha = [0, 0, 0, 0]
+
+memoria_cr = []         // Uma lista vazia
+crm = 0.5               // Média inicial para o CR
+
+// Inicializa a população do DEAP
+populacao = inicializa_populacao(tamanho_pop)
+avalia_fitness(populacao)
+
+
+//======================================================================
+// FASE 2: O ALGORITMO PRINCIPAL
+//======================================================================
+
+PARA cada geracao de 0 até MAX_GERACOES:
+
+    // --- Início de uma Geração ---
+
+    // (Opcional, mas necessário para a estratégia 'rand-to-best')
+    melhor_individuo_da_geracao = encontra_melhor(populacao)
+    
+    // Cria uma lista para guardar a população da próxima geração
+    proxima_populacao = []
+
+    PARA cada individuo 'alvo' na 'populacao':
+
+        // --- Início do processamento de um indivíduo ---
+
+        // A. GERAÇÃO DE PARÂMETROS ADAPTATIVOS
+        f_atual = gera_valor_da_distribuicao_normal(media=0.5, desvio_padrao=0.3)
+        cr_atual = gera_valor_da_distribuicao_normal(media=crm, desvio_padrao=0.1)
+        // Lembre-se de limitar 'cr_atual' para o intervalo [0, 1]
+
+        // B. SELEÇÃO DA ESTRATÉGIA
+        indice_estrategia_sorteada = sorteia_indice_com_base_nas(probabilidades_estrategias)
+        funcao_mutacao_escolhida = conjunto_de_estrategias[indice_estrategia_sorteada]
+
+        // C. EXECUÇÃO DA MUTAÇÃO/CROSSOVER
+        vetor_de_teste = chama(funcao_mutacao_escolhida, com_args={'individuo': alvo, 'populacao': populacao, 'f': f_atual, 'cr': cr_atual, 'melhor': melhor_individuo_da_geracao})
+
+        // D. AVALIAÇÃO
+        avalia_fitness(vetor_de_teste)
+
+        // E. SELEÇÃO E REGISTRO DO APRENDIZADO
+        SE fitness(vetor_de_teste) é melhor ou igual ao fitness(alvo):
+            // Sucesso!
+            adiciona(vetor_de_teste, na proxima_populacao)
+            incrementa(contadores_sucesso[indice_estrategia_sorteada])
+            adiciona(cr_atual, na memoria_cr)
+        SENÃO:
+            // Falha!
+            adiciona(alvo, na proxima_populacao) // O indivíduo original sobrevive
+            incrementa(contadores_falha[indice_estrategia_sorteada])
+        FIM SE
+
+        // --- Fim do processamento de um indivíduo ---
+    
+    FIM PARA
+
+    // Atualiza a população principal com os resultados da geração
+    populacao = proxima_populacao
+
+    // --- Fim de uma Geração ---
+
+
+    //======================================================================
+    // FASE 3: ADAPTAÇÃO (Ao final de um ciclo LP)
+    //======================================================================
+
+    SE (geracao + 1) MODULO LP == 0:
+        
+        // A. ATUALIZA AS PROBABILIDADES DAS ESTRATÉGIAS
+        PARA cada estrategia i de 0 até NUM_ESTRATEGIAS-1:
+            taxa_sucesso[i] = contadores_sucesso[i] / (contadores_sucesso[i] + contadores_falha[i])
+        FIM PARA
+        
+        normaliza(taxa_sucesso) para que a soma seja 1
+        probabilidades_estrategias = taxa_sucesso
+        
+        // Zera os contadores para o próximo ciclo
+        zera(contadores_sucesso)
+        zera(contadores_falha)
+
+        // B. ATUALIZA O CRM
+        SE memoria_cr não está vazia:
+            crm = calcula_mediana(memoria_cr)
+        FIM SE
+        
+        // Zera a memória para o próximo ciclo
+        limpa(memoria_cr)
+
+    FIM SE
+
+FIM PARA
+
+// --- FIM DO ALGORITMO ---
+```
