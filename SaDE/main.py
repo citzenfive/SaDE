@@ -10,5 +10,12 @@ s = SaDE(
     STATISTICAL_LOG=True,
     HOF_SIZE=100,
     GEN_SAVE=True,
-    BOUNDS=[(1e-5, 1e0), (1e-5, 1e0), (1e-5, 1e0), (1e-5, 1e0), (1e-5, 1e0), (1e-5, 1e0)]
+    BOUNDS=[
+        (1e-5, 1e0),
+        (1e-5, 1e0),
+        (1e-5, 1e0),
+        (1e-5, 1e0),
+        (1e-5, 1e0),
+        (1e-5, 1e0),
+    ],
 )
