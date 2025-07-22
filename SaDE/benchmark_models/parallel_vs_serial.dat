@@ -1,0 +1,23 @@
+Neutrophil-Bacteria interaction:
+    Parallel (N=4):
+        Ex1: 134.0177 seconds
+        Ex2: 133.6659 seconds
+        Ex3: 135.0937 seconds
+        Ex4: 135.7445 seconds
+        Ex5: 134.0612 seconds
+        ---------------------------------
+        Med: 134.5166 seconds
+        Std: 000.7552 seconds
+
+    Serial (N=1):
+        Ex1: 419.8070 seconds
+        Ex2: 434.1900 seconds
+        Ex3: 424.6410 seconds
+        Ex4: 414.8095 seconds
+        Ex5: 425.8881 seconds
+        ---------------------------------
+        Med: 423.8671 seconds
+        Std: 006.4772 seconds
+
+
+    "Speedup": 3.1510

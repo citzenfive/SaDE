@@ -17,7 +17,7 @@ from evaluation import *
 from mut_cross import *
 
 class SaDE:
-    def __init__(self, EVALUATION_FUNCTION, const_LP=50, POP_SIZE=150, MAX_GEN=2500, HOF_SIZE=1, BOUNDS=[], STATISTICAL_LOG=True, GEN_SAVE=True, PARALLEL=False, SEED=None, SAVE_PATH = ""):
+    def __init__(self, EVALUATION_FUNCTION, const_LP=50, POP_SIZE=150, MAX_GEN=2500, HOF_SIZE=1, BOUNDS=[], STATISTICAL_LOG=True, GEN_SAVE=True, PARALLEL=False, SEED=None, SAVE_PATH = "", PARALLEL_MAP_FUNC=None):
         self.LP = const_LP
         self.POP_SIZE = POP_SIZE
         self.MAX_GEN = MAX_GEN
@@ -32,6 +32,7 @@ class SaDE:
         
         self.INITIAL_POP = [] 
         
+        random.seed(self.config_seed)
 
         self.strategy_pool = [de_rand_1_bin, de_rand_to_best_2_bin, de_rand_2_bin, de_current_to_rand_1]
         self.num_strategies = len(self.strategy_pool)
@@ -44,6 +45,9 @@ class SaDE:
         self.BEST = None
         
         self.TOOLBOX = base.Toolbox()
+        
+        if PARALLEL_MAP_FUNC:
+            self.TOOLBOX.register("map", PARALLEL_MAP_FUNC)
 
         self.TOOLBOX.register("rand_1_bin", self.strategy_pool[0])
         self.TOOLBOX.register("rand_to_best_2_bin", self.strategy_pool[1])
@@ -155,44 +159,55 @@ class SaDE:
         for smp in sample:
             self.INITIAL_POP.append(self.CONFIGURED_CREATOR.Individual(smp.tolist()))
 
-        # Realizando a avaliação do fitness da população inicial
-        for pos, ind in enumerate(self.INITIAL_POP):
-            ind.fitness.values = self.TOOLBOX.evaluate(ind)
+        # # Realizando a avaliação do fitness da população inicial
+        # for pos, ind in enumerate(self.INITIAL_POP):
+        #     ind.fitness.values = self.TOOLBOX.evaluate(ind)
+        fitnesses = self.TOOLBOX.map(self.TOOLBOX.evaluate, self.INITIAL_POP)
+        for ind, fit in zip(self.INITIAL_POP, fitnesses):
+            ind.fitness.values = fit
     
     def bound_maker(self, offspring):
         # pass
         for pos, par in enumerate(offspring):
-            par = (self.l_bounds[pos]) + par * (self.u_bounds[pos] - self.l_bounds[pos])
+            if par < 0:
+                par = self.l_bounds[pos]
+            else:
+                par = (self.l_bounds[pos]) + par * (self.u_bounds[pos] - self.l_bounds[pos])
             offspring[pos] = par
 
     def run_SaDE(self):
-        # pass
-        print("\n\n")
-        ''' rand_1_bin, rand_to_best_2_bin, rand_2_bin, current_to_rand_1 '''
+        print("\n\n--- Iniciando a execução do SaDE ---")
+        
+        # Use os atributos inicializados no __init__
         STOP_CRITERIA = int(0.15 * self.MAX_GEN)
         NO_IMP_GEN = 0
         CURRENT_POPULATION = self.INITIAL_POP.copy()
         
+        #======================================================================
+        # LAÇO PRINCIPAL DE GERAÇÕES
+        #======================================================================
         for GEN in range(self.MAX_GEN):
-            CURRENT_BEST = tools.selBest(CURRENT_POPULATION, 1)[0]
-            if(GEN % 100 == 0):
-                print(CURRENT_BEST)
-                print(CURRENT_BEST.fitness.values[0])
-                print(self.str_prob)
-                print("\n\n")
-            next_gen = []
+            
+            # --- Preparação da Geração ---
+            CURRENT_BEST = self.TOOLBOX.select_best(CURRENT_POPULATION, 1)[0]
             self.HOF.update(CURRENT_POPULATION)
             
-            # Periodo de Aprendizado
+            if GEN % 100 == 0:
+                print(f"Gen {GEN}: Best Fitness = {CURRENT_BEST.fitness.values[0]:.6f} | "
+                    f"Probabilidades: {[f'{p:.2f}' for p in self.str_prob]}")
+
+            # --- FASE 1: Geração de Todos os Candidatos (sem avaliar) ---
+            
+            trial_vectors_info = []
             for IDV in CURRENT_POPULATION:
+                # Gera parâmetros e sorteia a estratégia para este indivíduo
                 current_F = self.prng.normal(0.5, 0.3)
                 current_CR = np.clip(self.prng.normal(self.crm, 0.1), 0.0, 1.0)
-                
-                strategy = self.prng.uniform(0, 1)
-                
                 str_index = self.prng.choice(self.num_strategies, p=self.str_prob)
+                
                 chosen_strategy_func = self.strategy_pool[str_index]
 
+                # Prepara os argumentos para a função de mutação
                 args = {
                     'ind': IDV, 'population': CURRENT_POPULATION, 'f': current_F, 'cr': current_CR,
                     'creator': self.CONFIGURED_CREATOR, 'toolbox': self.TOOLBOX
@@ -200,40 +215,63 @@ class SaDE:
                 if chosen_strategy_func.__name__ == 'de_rand_to_best_2_bin':
                     args['best'] = CURRENT_BEST
                 
+                # Gera o candidato e aplica os limites
                 offspring_candidate = chosen_strategy_func(**args)
-                
                 self.bound_maker(offspring=offspring_candidate)
                 
-                if len(offspring_candidate) == 0:
-                    print(len(offspring_candidate))
-                    print(offspring_candidate)
-                    print("Offspring vazio")
-                
-                if any(n < 0 for n in offspring_candidate):
-                    next_gen.append(IDV)
-                    self.failure_counter[str_index] += 1
-                else:
-                    offspring_candidate.fitness.values = self.TOOLBOX.evaluate(offspring_candidate)
-                    if offspring_candidate.fitness.values <= IDV.fitness.values:
-                        next_gen.append(offspring_candidate)
-                        self.success_counter[str_index] += 1
-                        self.cr_memory.append(current_CR)
-                    else:
-                        next_gen.append(IDV)
-                        self.failure_counter[str_index] += 1
+                # Guarda o candidato e as informações usadas para gerá-lo.
+                # O fitness ainda não foi calculado.
+                trial_vectors_info.append({
+                    "vector": offspring_candidate,
+                    "strategy_index": str_index,
+                    "cr": current_CR
+                })
+
+            # --- FASE 2: Avaliação em Paralelo (O Lote) ---
             
-            # Período de atualização
-            if (GEN+1) % self.LP == 0:
+            # Extrai apenas a lista de indivíduos que precisam ser avaliados
+            candidates_to_eval = [info["vector"] for info in trial_vectors_info]
+            
+            # AQUI ACONTECE A MÁGICA: O 'map' distribui o trabalho entre os processadores
+            fitnesses = self.TOOLBOX.map(self.TOOLBOX.evaluate, candidates_to_eval)
+            
+            # Atribui os fitness calculados de volta aos seus respectivos indivíduos
+            for ind, fit in zip(candidates_to_eval, fitnesses):
+                ind.fitness.values = fit
+
+            # --- FASE 3: Seleção e Contagem ---
+            
+            next_gen = []
+            for i in range(self.POP_SIZE):
+                target_vector = CURRENT_POPULATION[i]
+                trial_info = trial_vectors_info[i]
+                trial_vector = trial_info["vector"] # Agora já tem o fitness calculado
+                
+                # Lógica de seleção um-para-um
+                if trial_vector.fitness.values <= target_vector.fitness.values:
+                    next_gen.append(trial_vector)
+                    # Registra o sucesso para a estratégia e o CR usados
+                    self.success_counter[trial_info["strategy_index"]] += 1
+                    self.cr_memory.append(trial_info["cr"])
+                else:
+                    next_gen.append(target_vector)
+                    # Registra a falha para a estratégia usada
+                    self.failure_counter[trial_info["strategy_index"]] += 1
+            
+            # Atualiza a população para a próxima geração
+            CURRENT_POPULATION = next_gen.copy()
+
+            # --- FASE 4: Lógica de Adaptação do SaDE ---
+            
+            if (GEN + 1) % self.LP == 0:
                 self._update_strategy_probabilities()
                 
-                self.success_counter = np.zeros(self.num_strategies)
-                self.failure_counter = np.zeros(self.num_strategies)
+                self.success_counter.fill(0)
+                self.failure_counter.fill(0)
                 
                 if self.cr_memory:
                     self.crm = stat.median(self.cr_memory)
                 self.cr_memory = []
-
-            CURRENT_POPULATION = next_gen.copy()
 
             PROB_NEW_BEST = tools.selBest(next_gen, 1)[0]
             if PROB_NEW_BEST.fitness.values[0] == (CURRENT_BEST.fitness.values[0] + 1.0e-6) or PROB_NEW_BEST.fitness.values[0] == (CURRENT_BEST.fitness.values[0] - 1.0e-6):
@@ -242,7 +280,10 @@ class SaDE:
                 print("Parando por estagnação!")
                 break
 
-        self.BEST = tools.selBest(CURRENT_POPULATION, 1)[0]
+        # --- FIM DO LAÇO PRINCIPAL ---
+
+        # Guarda o melhor indivíduo final
+        self.BEST = self.TOOLBOX.select_best(CURRENT_POPULATION, 1)[0]
 
 
 
