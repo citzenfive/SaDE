@@ -4,6 +4,7 @@ from numpy import linalg as lng
 from matplotlib import pyplot as plt
 from scipy.integrate import odeint
 
+
 def evaluate(ind):
     result = []
-    return result[0],
+    return (result[0],)
