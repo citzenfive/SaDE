@@ -4,6 +4,7 @@ import statsmodels as stt
 import time
 import statistics as stat
 import math
+import os
 
 from numpy.random import Generator, MT19937, SeedSequence
 
@@ -14,7 +15,7 @@ from deap import creator
 from deap import gp
 from deap import tools
 
-from evaluation import *
+from bcim import *
 from mut_cross import *
 
 class SaDE:
@@ -71,6 +72,11 @@ class SaDE:
         self.u_bounds = [i[1] for i in BOUNDS]
         
         self.HOF = tools.HallOfFame(HOF_SIZE)
+        
+        self.SAVE_PATH_GEN = self.SAVE_PATH+"gens/"
+        
+        if not os.path.isdir(self.SAVE_PATH_GEN):
+            os.mkdir(self.SAVE_PATH_GEN)
         
         self.print_config()
         self.INIT_TIME = time.time()
@@ -286,7 +292,7 @@ class SaDE:
                 self.save_gen(CURRENT_POPULATION, GEN)
                 self.save_gen(next_gen, GEN+1)
                 break
-            if math.isclose(PROB_NEW_BEST.fitness.values[0], 0.0, rel_tol=1e-7, abs_tol=1e-6):
+            if math.isclose(PROB_NEW_BEST.fitness.values[0], 0.0, rel_tol=1e-7, abs_tol=1e-7):
                 print("Parando por melhora absoluta!")
                 self.save_gen(CURRENT_POPULATION, GEN)
                 self.save_gen(next_gen, GEN+1)
@@ -312,7 +318,7 @@ class SaDE:
     
     def save_gen(self, pop, gen_num):
         BEST_GEN = self.TOOLBOX.select_best(pop, 1)[0]
-        gen_file = open(self.SAVE_PATH+f"gen_{gen_num}.dat","w+")
+        gen_file = open(self.SAVE_PATH_GEN+f"gen_{gen_num}.dat","w+")
         gen_file.write(f"\tBest individual: \n\t\tGene: {BEST_GEN}\n\t\tFitness: {BEST_GEN.fitness.values[0]} \n\n\nGeneration:\n")
         for pos, ind in enumerate(pop):
             gen_file.write(f"\tIndividual {pos}: \n\t\tGene: {ind}\n\t\tFitness: {ind.fitness.values[0]} \n\n")

@@ -1,10 +1,11 @@
-from SaDE_DEAP import *
-from benchmark import *
-from evaluation import *
-
 import multiprocessing
-
 import sys
+
+from SaDE_DEAP import *
+from bcim import *
+from benchmark import *
+
+
 
 if __name__ == "__main__":
     N_PROCESSOR = int(sys.argv[1])
@@ -17,12 +18,12 @@ if __name__ == "__main__":
         POP_SIZE=200,
         MAX_GEN=5000,
         STATISTICAL_LOG=True,
-        HOF_SIZE=100,
+        HOF_SIZE=200,
         GEN_SAVE=True,
         SEED=1234,
-        BOUNDS=[(1e-5, 1e0), (1e-5, 1e0), (1e-5, 1e0), (1e-5, 1e0), (1e-5, 1e0), (1e-5, 1e0)],
+        BOUNDS=[(1e-5, 9.5e-1), (1e-5, 9.5e-1), (1e-5, 9.5e-1), (1e-5, 9.5e-1), (1e-5, 9.5e-1), (1e-5, 9.5e-1)],
         PARALLEL_MAP_FUNC=pool.map,
         ITERATIVE_SAVE=True,
-        SAVE_PATH="test_saving/"
+        SAVE_PATH="adjustment/First_Adjustments/"
     )
     pool.close()
