@@ -3,6 +3,7 @@ import pandas as pd
 import statsmodels as stt
 import time
 import statistics as stat
+import math
 
 from numpy.random import Generator, MT19937, SeedSequence
 
@@ -17,7 +18,7 @@ from evaluation import *
 from mut_cross import *
 
 class SaDE:
-    def __init__(self, EVALUATION_FUNCTION, const_LP=50, POP_SIZE=150, MAX_GEN=2500, HOF_SIZE=1, BOUNDS=[], STATISTICAL_LOG=True, GEN_SAVE=True, PARALLEL=False, SEED=None, SAVE_PATH = "", PARALLEL_MAP_FUNC=None):
+    def __init__(self, EVALUATION_FUNCTION, const_LP=50, POP_SIZE=150, MAX_GEN=2500, HOF_SIZE=1, BOUNDS=[], STATISTICAL_LOG=True, GEN_SAVE=True, PARALLEL=False, SEED=None, SAVE_PATH = "", PARALLEL_MAP_FUNC=None, ITERATIVE_SAVE=False):
         self.LP = const_LP
         self.POP_SIZE = POP_SIZE
         self.MAX_GEN = MAX_GEN
@@ -26,6 +27,8 @@ class SaDE:
         self.GEN_SAVE = GEN_SAVE
         self.SAVE_PATH = SAVE_PATH
         self.EVALUATION_FUNCTION = EVALUATION_FUNCTION
+        
+        self.ITERATIVE_SAVE = ITERATIVE_SAVE
         
         self.config_seed = SEED if SEED is not None else int(1234*time.time())
         self.prng = Generator(MT19937(seed=self.config_seed))
@@ -176,10 +179,10 @@ class SaDE:
             offspring[pos] = par
 
     def run_SaDE(self):
+        self.save_config()
         print("\n\n--- Iniciando a execução do SaDE ---")
-        
         # Use os atributos inicializados no __init__
-        STOP_CRITERIA = int(0.15 * self.MAX_GEN)
+        STOP_CRITERIA = int(0.30 * self.MAX_GEN)
         NO_IMP_GEN = 0
         CURRENT_POPULATION = self.INITIAL_POP.copy()
         
@@ -195,6 +198,8 @@ class SaDE:
             if GEN % 100 == 0:
                 print(f"Gen {GEN}: Best Fitness = {CURRENT_BEST.fitness.values[0]:.6f} | "
                     f"Probabilidades: {[f'{p:.2f}' for p in self.str_prob]}")
+                if self.ITERATIVE_SAVE == True:
+                    self.save_gen(CURRENT_POPULATION, GEN)
 
             # --- FASE 1: Geração de Todos os Candidatos (sem avaliar) ---
             
@@ -274,10 +279,17 @@ class SaDE:
                 self.cr_memory = []
 
             PROB_NEW_BEST = tools.selBest(next_gen, 1)[0]
-            if PROB_NEW_BEST.fitness.values[0] == (CURRENT_BEST.fitness.values[0] + 1.0e-6) or PROB_NEW_BEST.fitness.values[0] == (CURRENT_BEST.fitness.values[0] - 1.0e-6):
+            if math.isclose(PROB_NEW_BEST.fitness.values[0], CURRENT_BEST.fitness.values[0], rel_tol=1e-9, abs_tol=1e-6):
                 NO_IMP_GEN += 1
             if NO_IMP_GEN > STOP_CRITERIA:
                 print("Parando por estagnação!")
+                self.save_gen(CURRENT_POPULATION, GEN)
+                self.save_gen(next_gen, GEN+1)
+                break
+            if math.isclose(PROB_NEW_BEST.fitness.values[0], 0.0, rel_tol=1e-7, abs_tol=1e-6):
+                print("Parando por melhora absoluta!")
+                self.save_gen(CURRENT_POPULATION, GEN)
+                self.save_gen(next_gen, GEN+1)
                 break
 
         # --- FIM DO LAÇO PRINCIPAL ---
@@ -298,8 +310,27 @@ class SaDE:
     def print_hof(self, hof):
         pass
     
-    def save_gen(self, pop):
-        pass
+    def save_gen(self, pop, gen_num):
+        BEST_GEN = self.TOOLBOX.select_best(pop, 1)[0]
+        gen_file = open(self.SAVE_PATH+f"gen_{gen_num}.dat","w+")
+        gen_file.write(f"\tBest individual: \n\t\tGene: {BEST_GEN}\n\t\tFitness: {BEST_GEN.fitness.values[0]} \n\n\nGeneration:\n")
+        for pos, ind in enumerate(pop):
+            gen_file.write(f"\tIndividual {pos}: \n\t\tGene: {ind}\n\t\tFitness: {ind.fitness.values[0]} \n\n")
+        gen_file.close()
+
+    def save_config(self):
+        config_file = open(self.SAVE_PATH+"configurations.dat","w+")
+        config_file.write("--------------------------------------------------------------------------------------------------------------------------\n")
+        config_file.write("\t\t\t\t\tSaDE implementation by StormBreaker1726\n")
+        config_file.write("Configuration:\n")
+        config_file.write(f"\t Learning period = {self.LP}\n")
+        config_file.write(f"\t Population size = {self.POP_SIZE}\n")
+        config_file.write(f"\t Number of generations = {self.MAX_GEN}\n")
+        config_file.write(f"\t Lower bounds = {self.l_bounds}\n")
+        config_file.write(f"\t Upper bounds = {self.u_bounds}\n")
+        config_file.write(f"\t Seed = {self.config_seed}\n")
+        config_file.write("--------------------------------------------------------------------------------------------------------------------------\n\n")
+        config_file.close()
     
     def save_results(self):
         best_file = open(self.SAVE_PATH+"BEST_OF_ALL.dat","w+")
