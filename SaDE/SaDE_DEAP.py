@@ -287,6 +287,8 @@ class SaDE:
             PROB_NEW_BEST = tools.selBest(next_gen, 1)[0]
             if math.isclose(PROB_NEW_BEST.fitness.values[0], CURRENT_BEST.fitness.values[0], rel_tol=1e-9, abs_tol=1e-6):
                 NO_IMP_GEN += 1
+            else:
+                NO_IMP_GEN = 0
             if NO_IMP_GEN > STOP_CRITERIA:
                 print("Parando por estagnação!")
                 self.save_gen(CURRENT_POPULATION, GEN)
