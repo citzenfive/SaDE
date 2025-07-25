@@ -178,10 +178,12 @@ class SaDE:
     def bound_maker(self, offspring):
         # pass
         for pos, par in enumerate(offspring):
-            if par < 0:
+            if par < self.l_bounds[pos]:
                 par = self.l_bounds[pos]
+            elif par > self.u_bounds[pos]:
+                par = self.u_bounds[pos]
             else:
-                par = (self.l_bounds[pos]) + par * (self.u_bounds[pos] - self.l_bounds[pos])
+                par = par
             offspring[pos] = par
 
     def run_SaDE(self):

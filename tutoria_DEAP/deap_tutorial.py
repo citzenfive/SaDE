@@ -120,20 +120,21 @@ u_bounds = [i[1] for i in bounds]
 
 def bound_maker(offspring):
     for pos, par in enumerate(offspring):
-        print(par)
-        par = (l_bounds[pos]) + par * (u_bounds[pos] - l_bounds[pos])
-        print(par)
+        if par < l_bounds[pos]:
+            par = l_bounds[pos]
+        elif par > u_bounds[pos]:
+            par = u_bounds[pos]
+        else:
+            par = par
         offspring[pos] = par
 
 idv0 = (creator.Individual([0, 1, -3, -4, 9, -1]))
 
-print(idv3)
+print(idv0)
 print("\n\n\n")
-bound_maker(offspring=idv0)
+idv11 = bound_maker(offspring=idv0)
 print("\n\n\n")
+print(idv0)
 print("\n\n\n")
-print("\n\n\n")
-print("\n\n\n")
-print(idv3)
-a = idv3[0]
-print(idv3[0])
+print(idv11)
+
