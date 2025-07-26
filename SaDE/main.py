@@ -15,15 +15,15 @@ if __name__ == "__main__":
     s = SaDE(
         EVALUATION_FUNCTION=neut_bac_model,
         const_LP=60,
-        POP_SIZE=200,
+        POP_SIZE=512,
         MAX_GEN=5000,
         STATISTICAL_LOG=True,
         HOF_SIZE=200,
         GEN_SAVE=True,
-        SEED=1234,
-        BOUNDS=[(1e-5, 9.5e-1), (1e-5, 9.5e-1), (1e-5, 9.5e-1), (1e-5, 9.5e-1), (1e-5, 9.5e-1), (1e-5, 9.5e-1)],
+        # SEED=1234,
+        BOUNDS=[(1e-5, 1e0), (1e-5, 1e0), (1e-5, 1e0), (1e-5, 1e0), (1e-5, 1e0), (1e-5, 1e0)],
         PARALLEL_MAP_FUNC=pool.map,
         ITERATIVE_SAVE=True,
-        SAVE_PATH="adjustment/First_Adjustments/"
+        SAVE_PATH="adjustment/cluster_try/"
     )
     pool.close()

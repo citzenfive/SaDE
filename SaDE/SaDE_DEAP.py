@@ -38,6 +38,7 @@ class SaDE:
         
         random.seed(self.config_seed)
 
+        # self.strategy_pool = [de_rand_1_bin, de_rand_to_best_2_bin, de_rand_2_bin, de_current_to_rand_1]
         self.strategy_pool = [de_rand_1_bin, de_rand_to_best_2_bin, de_rand_2_bin, de_current_to_rand_1, de_current_to_pbest_1, de_best_1_bin]
         self.num_strategies = len(self.strategy_pool)
         self.str_prob = np.full(self.num_strategies, 1.0 / self.num_strategies)
@@ -59,6 +60,10 @@ class SaDE:
         self.TOOLBOX.register("de_current_to_rand_1", de_current_to_rand_1)
         self.TOOLBOX.register("de_current_to_pbest_1", de_current_to_pbest_1)
         self.TOOLBOX.register("de_best_1_bin", de_best_1_bin)
+    
+        self.TOOLBOX.register("evaluate", self.EVALUATION_FUNCTION)
+        self.TOOLBOX.register("rnd_selection", tools.selRandom)
+        self.TOOLBOX.register("select_best", tools.selBest)
 
         creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
         creator.create("Individual", list, fitness=creator.FitnessMin)
@@ -73,6 +78,12 @@ class SaDE:
         self.HOF = tools.HallOfFame(HOF_SIZE)
         
         self.SAVE_PATH_GEN = self.SAVE_PATH+"gens/"
+        
+        self.stats = tools.Statistics(key=lambda ind: ind.fitness.values)
+        self.stats.register("avg", np.mean)
+        self.stats.register("std", np.std)
+        self.stats.register("min", np.min)
+        self.stats.register("max", np.max)
         
         if not os.path.isdir(self.SAVE_PATH_GEN):
             os.mkdir(self.SAVE_PATH_GEN)
@@ -197,19 +208,12 @@ class SaDE:
         # LAÇO PRINCIPAL DE GERAÇÕES
         #======================================================================
         for GEN in range(self.MAX_GEN):
-            
+            init_gen = time.time()
             # --- Preparação da Geração ---
             CURRENT_BEST = self.TOOLBOX.select_best(CURRENT_POPULATION, 1)[0]
             self.HOF.update(CURRENT_POPULATION)
-            
-            if GEN % 100 == 0:
-                print(f"Gen {GEN}: Best Fitness = {CURRENT_BEST.fitness.values[0]:.6f} | "
-                    f"Probabilidades: {[f'{p:.2f}' for p in self.str_prob]}")
-                if self.ITERATIVE_SAVE == True:
-                    self.save_gen(CURRENT_POPULATION, GEN)
 
             # --- FASE 1: Geração de Todos os Candidatos (sem avaliar) ---
-            
             trial_vectors_info = []
             for IDV in CURRENT_POPULATION:
                 # Gera parâmetros e sorteia a estratégia para este indivíduo
@@ -231,21 +235,29 @@ class SaDE:
                 
                 # Gera o candidato e aplica os limites
                 offspring_candidate = chosen_strategy_func(**args)
-                self.bound_maker(offspring=offspring_candidate)
-                
-                # Guarda o candidato e as informações usadas para gerá-lo.
-                # O fitness ainda não foi calculado.
-                trial_vectors_info.append({
-                    "vector": offspring_candidate,
-                    "strategy_index": str_index,
-                    "cr": current_CR
-                })
+                # self.bound_maker(offspring=offspring_candidate)
+                if any(x < 0 for x in offspring_candidate):
+                    trial_vectors_info.append({
+                        "vector": IDV,
+                        "strategy_index": str_index,
+                        "cr": current_CR
+                    })
+                else:
+                    # Guarda o candidato e as informações usadas para gerá-lo.
+                    # O fitness ainda não foi calculado.
+                    trial_vectors_info.append({
+                        "vector": offspring_candidate,
+                        "strategy_index": str_index,
+                        "cr": current_CR
+                    })
 
             # --- FASE 2: Avaliação em Paralelo (O Lote) ---
             
             # Extrai apenas a lista de indivíduos que precisam ser avaliados
             candidates_to_eval = [info["vector"] for info in trial_vectors_info]
             
+            other_operations_init = time.time()
+
             # AQUI ACONTECE A MÁGICA: O 'map' distribui o trabalho entre os processadores
             fitnesses = self.TOOLBOX.map(self.TOOLBOX.evaluate, candidates_to_eval)
             
@@ -253,7 +265,9 @@ class SaDE:
             for ind, fit in zip(candidates_to_eval, fitnesses):
                 ind.fitness.values = fit
 
+            other_operations_end = time.time()
             # --- FASE 3: Seleção e Contagem ---
+            other_operations_total = other_operations_end-other_operations_init
             
             next_gen = []
             for i in range(self.POP_SIZE):
@@ -274,7 +288,6 @@ class SaDE:
             
             # Atualiza a população para a próxima geração
             CURRENT_POPULATION = next_gen.copy()
-
             # --- FASE 4: Lógica de Adaptação do SaDE ---
             
             if (GEN + 1) % self.LP == 0:
@@ -287,6 +300,14 @@ class SaDE:
                     self.crm = stat.median(self.cr_memory)
                 self.cr_memory = []
 
+            end_gen = time.time()
+            
+            if GEN % 10 == 0:
+                print(f"Gen {GEN}: Best Fitness = {CURRENT_BEST.fitness.values[0]:.6f} | "
+                    f"Probabilities: {[f'{p:.2f}' for p in self.str_prob]} | Spent time = {end_gen-init_gen} seconds | Eval operations = {other_operations_total} seconds | No improvement generations = {NO_IMP_GEN} | std = {self.stats.compile(CURRENT_POPULATION)['std']}")
+                if self.ITERATIVE_SAVE == True:
+                    self.save_gen(CURRENT_POPULATION, GEN, end_gen-init_gen)
+
             PROB_NEW_BEST = tools.selBest(next_gen, 1)[0]
             if math.isclose(PROB_NEW_BEST.fitness.values[0], CURRENT_BEST.fitness.values[0], rel_tol=1e-9, abs_tol=1e-6):
                 NO_IMP_GEN += 1
@@ -294,15 +315,19 @@ class SaDE:
                 NO_IMP_GEN = 0
             if NO_IMP_GEN > STOP_CRITERIA:
                 print("Parando por estagnação!")
-                self.save_gen(CURRENT_POPULATION, GEN)
-                self.save_gen(next_gen, GEN+1)
+                self.save_gen(CURRENT_POPULATION, GEN, end_gen-init_gen)
+                self.save_gen(next_gen, GEN+1, 0)
                 break
             if math.isclose(PROB_NEW_BEST.fitness.values[0], 0.0, rel_tol=1e-7, abs_tol=1e-7):
                 print("Parando por melhora absoluta!")
-                self.save_gen(CURRENT_POPULATION, GEN)
-                self.save_gen(next_gen, GEN+1)
+                self.save_gen(CURRENT_POPULATION, GEN, end_gen-init_gen)
+                self.save_gen(next_gen, GEN+1, 0)
                 break
-
+            if math.isclose(self.stats.compile(CURRENT_POPULATION)['std'], 1e-6, rel_tol=1e-6, abs_tol=1e-6):
+                print("Parando por uniformização da população!")
+                self.save_gen(CURRENT_POPULATION, GEN, end_gen-init_gen)
+                self.save_gen(next_gen, GEN+1, 0)
+                break
         # --- FIM DO LAÇO PRINCIPAL ---
 
         # Guarda o melhor indivíduo final
@@ -321,10 +346,10 @@ class SaDE:
     def print_hof(self, hof):
         pass
     
-    def save_gen(self, pop, gen_num):
+    def save_gen(self, pop, gen_num, time):
         BEST_GEN = self.TOOLBOX.select_best(pop, 1)[0]
         gen_file = open(self.SAVE_PATH_GEN+f"gen_{gen_num}.dat","w+")
-        gen_file.write(f"\tBest individual: \n\t\tGene: {BEST_GEN}\n\t\tFitness: {BEST_GEN.fitness.values[0]} \n\n\nGeneration:\n")
+        gen_file.write(f"\tBest individual: \n\t\tGene: {BEST_GEN}\n\t\tFitness: {BEST_GEN.fitness.values[0]} \n\n\nGeneration: {gen_num}\n\n\nSpent time: {time} seconds\n\n")
         for pos, ind in enumerate(pop):
             gen_file.write(f"\tIndividual {pos}: \n\t\tGene: {ind}\n\t\tFitness: {ind.fitness.values[0]} \n\n")
         gen_file.close()

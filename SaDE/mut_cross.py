@@ -191,8 +191,7 @@ def de_current_to_pbest_1(ind, population, f, cr, creator, toolbox, p=0.1):
     
     # --- 3. Criação do Vetor Mutante ---
     # Fórmula: v = x_atual + F * (x_pbest - x_atual) + F * (a - b)
-    mutant_list = [ind_i + f * (pbest_i - ind_i) + f * (a_i - b_i) 
-                   for ind_i, pbest_i, a_i, b_i in zip(ind, p_best, a, b)]
+    mutant_list = [ind_i + f * (pbest_i - ind_i) + f * (a_i - b_i) for ind_i, pbest_i, a_i, b_i in zip(ind, p_best, a, b)]
     
     # --- 4. Crossover Binomial ---
     trial = creator.Individual()

@@ -15,7 +15,7 @@ def run_bcim(ind):
     separados por espaços, que serão atribuídas a I_calc e E_calc.
     """
     
-    caminho_executavel = "./meu_programa_exec"
+    caminho_executavel = "./serial_exec"
     try:
         comando = [caminho_executavel] + [str(gene) for gene in ind]
     except Exception as e:
@@ -69,8 +69,8 @@ def evaluate(ind):
     )
     DATA_IL_17 = pd.read_csv(in_dir+"il_17_IL-10_KO.csv", header=None)
 
-    E_exp = (DATA_TNF_ALPHA[1]).to_numpy()
-    I_exp = (DATA_IFN_GAMMA[1] + DATA_IL_17[1]).to_numpy()
+    E_exp = 0.05882 * (DATA_TNF_ALPHA[1]).to_numpy()
+    I_exp = 0.05882 * (DATA_IFN_GAMMA[1] + DATA_IL_17[1]).to_numpy()
 
     fitness_final = None
 
@@ -79,8 +79,11 @@ def evaluate(ind):
     
     E_calc, I_calc = run_bcim(ind)
     
-    error_e = lng.norm(np.abs(E_exp-E_calc), np.inf)
-    error_i = lng.norm(np.abs(I_exp-I_calc), np.inf)
+    # error_e = lng.norm((E_exp-E_calc), np.inf)
+    # error_i = lng.norm((I_exp-I_calc), np.inf)
+    
+    error_e = lng.norm((E_exp-E_calc), 2)
+    error_i = lng.norm((I_exp-I_calc), 2)
     
     fitness_final = max(error_e, error_i)
     
