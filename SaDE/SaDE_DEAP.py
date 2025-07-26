@@ -38,7 +38,7 @@ class SaDE:
         
         random.seed(self.config_seed)
 
-        self.strategy_pool = [de_rand_1_bin, de_rand_to_best_2_bin, de_rand_2_bin, de_current_to_rand_1]
+        self.strategy_pool = [de_rand_1_bin, de_rand_to_best_2_bin, de_rand_2_bin, de_current_to_rand_1, de_current_to_pbest_1, de_best_1_bin]
         self.num_strategies = len(self.strategy_pool)
         self.str_prob = np.full(self.num_strategies, 1.0 / self.num_strategies)
         self.success_counter = np.zeros(self.num_strategies)
@@ -53,13 +53,12 @@ class SaDE:
         if PARALLEL_MAP_FUNC:
             self.TOOLBOX.register("map", PARALLEL_MAP_FUNC)
 
-        self.TOOLBOX.register("rand_1_bin", self.strategy_pool[0])
-        self.TOOLBOX.register("rand_to_best_2_bin", self.strategy_pool[1])
-        self.TOOLBOX.register("rand_2_bin", self.strategy_pool[2])
-        self.TOOLBOX.register("current_to_rand_1", self.strategy_pool[3])
-        self.TOOLBOX.register("evaluate", self.EVALUATION_FUNCTION)
-        self.TOOLBOX.register("rnd_selection", tools.selRandom)
-        self.TOOLBOX.register("select_best", tools.selBest)
+        self.TOOLBOX.register("de_rand_1_bin", de_rand_1_bin)
+        self.TOOLBOX.register("de_rand_to_best_2_bin", de_rand_to_best_2_bin)
+        self.TOOLBOX.register("de_rand_2_bin", de_rand_2_bin)
+        self.TOOLBOX.register("de_current_to_rand_1", de_current_to_rand_1)
+        self.TOOLBOX.register("de_current_to_pbest_1", de_current_to_pbest_1)
+        self.TOOLBOX.register("de_best_1_bin", de_best_1_bin)
 
         creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
         creator.create("Individual", list, fitness=creator.FitnessMin)
@@ -225,7 +224,9 @@ class SaDE:
                     'ind': IDV, 'population': CURRENT_POPULATION, 'f': current_F, 'cr': current_CR,
                     'creator': self.CONFIGURED_CREATOR, 'toolbox': self.TOOLBOX
                 }
-                if chosen_strategy_func.__name__ == 'de_rand_to_best_2_bin':
+                # if chosen_strategy_func.__name__ == 'de_rand_to_best_2_bin':
+                #     args['best'] = CURRENT_BEST
+                if chosen_strategy_func.__name__ in ['de_rand_to_best_2_bin', 'de_best_1_bin']:
                     args['best'] = CURRENT_BEST
                 
                 # Gera o candidato e aplica os limites
