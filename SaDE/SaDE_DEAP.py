@@ -88,6 +88,8 @@ class SaDE:
         if not os.path.isdir(self.SAVE_PATH_GEN):
             os.mkdir(self.SAVE_PATH_GEN)
         
+        self.TOP_TIER = int(0.05*self.POP_SIZE)
+        
         self.print_config()
         self.INIT_TIME = time.time()
         self.gen_initial_pop()
@@ -185,6 +187,28 @@ class SaDE:
         for ind, fit in zip(self.INITIAL_POP, fitnesses):
             ind.fitness.values = fit
     
+    def gen_new_rnd_pop(self, size):
+        # Configuração do gerador da população inicial
+        sampler = qmc.Sobol(d=len(self.l_bounds), scramble=True, rng=self.prng)
+        m = np.log2(size)
+        m = int(np.ceil(m))
+        sample = sampler.random_base2(m=m)
+        qmc.scale(sample=sample, l_bounds=self.l_bounds, u_bounds=self.u_bounds) # Garante que as minhas amostras estejam dentro do intervalo necessário
+
+        new_rnd_pop = []
+
+        for smp in sample:
+            new_rnd_pop.append(self.CONFIGURED_CREATOR.Individual(smp.tolist()))
+
+        # # Realizando a avaliação do fitness da população inicial
+        # for pos, ind in enumerate(new_rnd_pop):
+        #     ind.fitness.values = self.TOOLBOX.evaluate(ind)
+        fitnesses = self.TOOLBOX.map(self.TOOLBOX.evaluate, new_rnd_pop)
+        for ind, fit in zip(new_rnd_pop, fitnesses):
+            ind.fitness.values = fit
+        
+        return new_rnd_pop.copy()
+    
     def bound_maker(self, offspring):
         # pass
         for pos, par in enumerate(offspring):
@@ -203,6 +227,7 @@ class SaDE:
         STOP_CRITERIA = int(0.30 * self.MAX_GEN)
         NO_IMP_GEN = 0
         CURRENT_POPULATION = self.INITIAL_POP.copy()
+        ESTAG_POP = 0
         
         #======================================================================
         # LAÇO PRINCIPAL DE GERAÇÕES
@@ -236,7 +261,7 @@ class SaDE:
                 # Gera o candidato e aplica os limites
                 offspring_candidate = chosen_strategy_func(**args)
                 # self.bound_maker(offspring=offspring_candidate)
-                if any(x < 0 for x in offspring_candidate):
+                if any(x < 0 for x in offspring_candidate) or any(x < self.l_bounds[pos] for pos, x in enumerate(offspring_candidate)) or any(x > self.u_bounds[pos] for pos, x in enumerate(offspring_candidate)):
                     trial_vectors_info.append({
                         "vector": IDV,
                         "strategy_index": str_index,
@@ -304,7 +329,7 @@ class SaDE:
             
             if GEN % 10 == 0:
                 print(f"Gen {GEN}: Best Fitness = {CURRENT_BEST.fitness.values[0]:.6f} | "
-                    f"Probabilities: {[f'{p:.2f}' for p in self.str_prob]} | Spent time = {end_gen-init_gen} seconds | Eval operations = {other_operations_total} seconds | No improvement generations = {NO_IMP_GEN} | std = {self.stats.compile(CURRENT_POPULATION)['std']}")
+                    f"Probabilities: {[f'{p:.2f}' for p in self.str_prob]} | Spent time = {end_gen-init_gen} seconds | Eval operations = {other_operations_total} seconds | No improvement generations = {NO_IMP_GEN} | std = {self.stats.compile(CURRENT_POPULATION)['std']} | Estagnation = {ESTAG_POP}")
                 if self.ITERATIVE_SAVE == True:
                     self.save_gen(CURRENT_POPULATION, GEN, end_gen-init_gen)
 
@@ -323,11 +348,22 @@ class SaDE:
                 self.save_gen(CURRENT_POPULATION, GEN, end_gen-init_gen)
                 self.save_gen(next_gen, GEN+1, 0)
                 break
-            if math.isclose(self.stats.compile(CURRENT_POPULATION)['std'], 1e-6, rel_tol=1e-6, abs_tol=1e-6):
+            if math.isclose(self.stats.compile(CURRENT_POPULATION)['std'], 1e-6, rel_tol=1e-6, abs_tol=1e-6) and ESTAG_POP >= 3:
                 print("Parando por uniformização da população!")
                 self.save_gen(CURRENT_POPULATION, GEN, end_gen-init_gen)
                 self.save_gen(next_gen, GEN+1, 0)
                 break
+            elif math.isclose(self.stats.compile(CURRENT_POPULATION)['std'], 1e-6, rel_tol=1e-6, abs_tol=1e-6) and ESTAG_POP < 3:
+                ESTAG_POP += 1
+                print(f"Reinicializando população em gen = {GEN}!")
+                TOP_TIER_POP = []
+                TOP_TIER_POP = tools.selBest(next_gen, self.TOP_TIER)
+                new_rnd_pop = self.gen_new_rnd_pop(self.POP_SIZE - self.TOP_TIER)
+                new_rnd_pop = TOP_TIER_POP + new_rnd_pop
+                CURRENT_POPULATION = new_rnd_pop.copy()
+                self.str_prob = np.full(self.num_strategies, 1.0 / self.num_strategies)
+                print(f"Gen {GEN}: Best Fitness = {CURRENT_BEST.fitness.values[0]:.6f} | "
+                    f"Probabilities: {[f'{p:.2f}' for p in self.str_prob]} | Spent time = {end_gen-init_gen} seconds | Eval operations = {other_operations_total} seconds | No improvement generations = {NO_IMP_GEN} | std = {self.stats.compile(CURRENT_POPULATION)['std']} | Estagnation = {ESTAG_POP}")
         # --- FIM DO LAÇO PRINCIPAL ---
 
         # Guarda o melhor indivíduo final

@@ -52,7 +52,8 @@ def model(params):
 
         erro_B = lng.norm(Y[:,0] - bacteria_data, np.inf)
         erro_N = lng.norm(Y[:,1] - neutrophil_data, np.inf)
-        error = max(erro_B, erro_N)
+        # error = max(erro_B, erro_N)
+        return erro_B, erro_N
 
     # Catch the specific floating point errors that indicate instability
     except (FloatingPointError, ValueError): 
@@ -65,4 +66,4 @@ def model(params):
 
 def neut_bac_model(ind):
     result = model(ind)
-    return result[0],
+    return result
