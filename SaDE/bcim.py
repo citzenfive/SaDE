@@ -77,7 +77,7 @@ def evaluate(ind):
     error_e = None
     error_i = None
     
-    E_calc, I_calc = run_bcim(ind)
+    I_calc, E_calc = run_bcim(ind)
     
     # error_e = lng.norm((E_exp-E_calc), np.inf)
     # error_i = lng.norm((I_exp-I_calc), np.inf)
