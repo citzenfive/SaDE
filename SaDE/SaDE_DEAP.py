@@ -170,22 +170,87 @@ class SaDE:
         self.str_prob = final_probabilities
 
     def gen_initial_pop(self):
-        # Configuração do gerador da população inicial
+        """Gera a população inicial usando o amostrador Sobol e escalonamento manual."""
+        
+        # --- Passo 1: Configurar o amostrador ---
         sampler = qmc.Sobol(d=len(self.l_bounds), scramble=True, rng=self.prng)
+        
+        # --- Passo 2: Gerar a amostra no cubo unitário [0, 1] ---
         m = np.log2(self.POP_SIZE)
         m = int(np.ceil(m))
-        sample = sampler.random_base2(m=m)
-        qmc.scale(sample=sample, l_bounds=self.l_bounds, u_bounds=self.u_bounds) # Garante que as minhas amostras estejam dentro do intervalo necessário
-
-        for smp in sample:
+        sample_unitario = sampler.random_base2(m=m)
+        # --- Passo 3: Escalonamento Manual (Substituindo qmc.scale) ---
+        
+        # Converte seus limites para arrays NumPy para permitir operações vetorizadas
+        l_bounds_arr = np.array(self.l_bounds)
+        u_bounds_arr = np.array(self.u_bounds)
+        
+        # Aplica a fórmula de escalonamento linear manualmente a toda a matriz de uma vez
+        scaled_sample = l_bounds_arr + sample_unitario * (u_bounds_arr - l_bounds_arr)
+        
+        # --- Passo 4: Criar e avaliar os indivíduos do DEAP ---
+        
+        # Zera a população inicial antes de preenchê-la
+        self.INITIAL_POP = []
+        # Usa a nova variável 'scaled_sample'
+        for smp in scaled_sample:
             self.INITIAL_POP.append(self.CONFIGURED_CREATOR.Individual(smp.tolist()))
 
-        # # Realizando a avaliação do fitness da população inicial
-        # for pos, ind in enumerate(self.INITIAL_POP):
-        #     ind.fitness.values = self.TOOLBOX.evaluate(ind)
+        dbg_initial_pop = open(self.SAVE_PATH+"debug_pop_inicial.txt", "w+")
+        # ## ADICIONE O PRINT DE VERIFICAÇÃO FINAL AQUI PARA CONFIRMAR ##
+        print("\n--- DEBUG: VERIFICAÇÃO FINAL DA POPULAÇÃO INICIAL ---")
+        dbg_initial_pop.write("\n--- DEBUG: VERIFICAÇÃO FINAL DA POPULAÇÃO INICIAL ---\n")
+        
+    
+        # IMPORTANTE: Verifique se esta lista tem EXATAMENTE a mesma ordem
+        # dos parâmetros na sua lista 'BOUNDS' que você passa para a classe.
+        # Esta ordem é baseada no seu último print de 'Lower bounds'.
+        nomes_dos_parametros = [
+            'rho_i',
+            'rho_e',
+            'chi',       # Assumindo que o 3º parâmetro é chi
+            'tau_b',
+            'c_apcr_b',
+            'c_apcm_b',  # Assumindo a ordem dos 6 otimizados
+            'c_b_Th',    # Assumindo a ordem dos 4 novos
+            'c_apc_c',
+            'APCr_max'
+        ]
+    
+        # Itera sobre cada parâmetro (cada coluna da população)
+        for i in range(len(self.l_bounds)):
+            param_name = nomes_dos_parametros[i]
+            lower_bound = self.l_bounds[i]
+            upper_bound = self.u_bounds[i]
+            
+            # Extrai todos os valores para o parâmetro atual de todos os indivíduos
+            param_values = [ind[i] for ind in self.INITIAL_POP]
+            
+            print(f"\nParâmetro '{param_name}' (Bounds: [{lower_bound:.2e}, {upper_bound:.2e}]):")
+            dbg_initial_pop.write(f"\nParâmetro '{param_name}' (Bounds: [{lower_bound:.2e}, {upper_bound:.2e}]):\n")
+            
+            if param_values: # Verifica se a lista não está vazia
+                print(f"  Mínimo: {min(param_values):.6f}")
+                print(f"  Máximo: {max(param_values):.6f}")
+                print(f"  Média:  {np.mean(param_values):.6f}")
+                dbg_initial_pop.write(f"  Mínimo: {min(param_values):.6f}\n")
+                dbg_initial_pop.write(f"  Máximo: {max(param_values):.6f}\n")
+                dbg_initial_pop.write(f"  Média:  {np.mean(param_values):.6f}\n")
+            else:
+                print("  Nenhum valor encontrado.")
+                dbg_initial_pop.write("  Nenhum valor encontrado.\n")
+                
+
+        print("------------------------------------------------------\n")
+        dbg_initial_pop.write("\n------------------------------------------------------\n")
+        
+        
+        # exit(-1)
+        # Avalia a população inicial (em paralelo, se configurado)
         fitnesses = self.TOOLBOX.map(self.TOOLBOX.evaluate, self.INITIAL_POP)
         for ind, fit in zip(self.INITIAL_POP, fitnesses):
             ind.fitness.values = fit
+            
     
     def gen_new_rnd_pop(self, size):
         # Configuração do gerador da população inicial
