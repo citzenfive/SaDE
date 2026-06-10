@@ -1,166 +1,158 @@
-import random
+"""Mutation and crossover strategies used by the SaDE implementation.
+
+All random operations receive the same NumPy ``Generator`` used by SaDE,
+which makes complete runs reproducible from a single seed.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from typing import Any
+
+import numpy as np
+from numpy.random import Generator
 
 
-def _make_trial(ind, mutant_list, cr, creator):
-    """
-    Aplica crossover binomial entre o indivíduo atual e o vetor mutante.
-    """
-    trial = creator.Individual()
-    rand_j = random.randrange(len(ind))
-
-    for i in range(len(ind)):
-        if random.random() < cr or i == rand_j:
-            trial.append(mutant_list[i])
-        else:
-            trial.append(ind[i])
-
-    del trial.fitness.values
-    return trial
+Individual = Any
 
 
-def de_rand_1_bin(ind, population, f, cr, creator, toolbox):
-    """
-    DE/rand/1/bin
-    v = a + F * (b - c)
-    """
-    candidates = [x for x in population if x is not ind]
-
-    if len(candidates) < 3:
-        return ind
-
-    a, b, c = toolbox.rnd_selection(candidates, 3)
-
-    mutant_list = [
-        a_i + f * (b_i - c_i)
-        for a_i, b_i, c_i in zip(a, b, c)
+def _sample_distinct(
+    population: Sequence[Individual],
+    count: int,
+    rng: Generator,
+    *excluded: Individual,
+) -> list[Individual] | None:
+    """Sample distinct individuals while excluding objects by identity."""
+    excluded_ids = {id(ind) for ind in excluded if ind is not None}
+    valid_indices = [
+        index for index, candidate in enumerate(population)
+        if id(candidate) not in excluded_ids
     ]
 
-    return _make_trial(ind, mutant_list, cr, creator)
+    if len(valid_indices) < count:
+        return None
+
+    selected = rng.choice(valid_indices, size=count, replace=False)
+    return [population[int(index)] for index in np.atleast_1d(selected)]
 
 
-def de_rand_2_bin(ind, population, f, cr, creator, toolbox):
+def _make_trial(
+    target: Individual,
+    mutant: np.ndarray,
+    cr: float,
+    creator: Any,
+    rng: Generator,
+) -> Individual:
+    """Apply vectorized binomial crossover to a mutant vector."""
+    target_array = np.asarray(target, dtype=float)
+    crossover_mask = rng.random(target_array.size) < cr
+    crossover_mask[int(rng.integers(target_array.size))] = True
+
+    trial_values = np.where(crossover_mask, mutant, target_array)
+    return creator.Individual(trial_values.tolist())
+
+
+def de_rand_1_bin(ind, population, f, cr, creator, rng, **_):
+    """DE/rand/1/bin: ``v = a + F (b - c)``."""
+    selected = _sample_distinct(population, 3, rng, ind)
+    if selected is None:
+        return None
+
+    a, b, c = map(lambda x: np.asarray(x, dtype=float), selected)
+    mutant = a + f * (b - c)
+    return _make_trial(ind, mutant, cr, creator, rng)
+
+
+def de_rand_2_bin(ind, population, f, cr, creator, rng, **_):
+    """DE/rand/2/bin: ``v = a + F (b - c) + F (d - e)``."""
+    selected = _sample_distinct(population, 5, rng, ind)
+    if selected is None:
+        return None
+
+    a, b, c, d, e = map(lambda x: np.asarray(x, dtype=float), selected)
+    mutant = a + f * (b - c) + f * (d - e)
+    return _make_trial(ind, mutant, cr, creator, rng)
+
+
+def de_best_1_bin(ind, population, best, f, cr, creator, rng, **_):
+    """DE/best/1/bin: ``v = best + F (a - b)``."""
+    selected = _sample_distinct(population, 2, rng, ind, best)
+    if selected is None:
+        return None
+
+    a, b = map(lambda x: np.asarray(x, dtype=float), selected)
+    mutant = np.asarray(best, dtype=float) + f * (a - b)
+    return _make_trial(ind, mutant, cr, creator, rng)
+
+
+def de_rand_to_best_2_bin(ind, population, best, f, cr, creator, rng, **_):
+    """DE/rand-to-best/2/bin.
+
+    ``v = a + F (best - a) + F (b - c) + F (d - e)``
+
+    The previous implementation used ``best + F(a-b) + F(c-d)``, which is
+    DE/best/2 rather than DE/rand-to-best/2.
     """
-    DE/rand/2/bin
-    v = a + F * (b - c) + F * (d - e)
+    selected = _sample_distinct(population, 5, rng, ind, best)
+    if selected is None:
+        return None
+
+    a, b, c, d, e = map(lambda x: np.asarray(x, dtype=float), selected)
+    best_array = np.asarray(best, dtype=float)
+    mutant = a + f * (best_array - a) + f * (b - c) + f * (d - e)
+    return _make_trial(ind, mutant, cr, creator, rng)
+
+
+def de_current_to_rand_1(ind, population, f, cr, creator, rng, **_):
+    """Current-to-rand/1 with binomial crossover.
+
+    ``v = current + F (x_rand - current) + F (a - b)``
     """
-    candidates = [x for x in population if x is not ind]
+    selected = _sample_distinct(population, 3, rng, ind)
+    if selected is None:
+        return None
 
-    if len(candidates) < 5:
-        return ind
-
-    a, b, c, d, e = toolbox.rnd_selection(candidates, 5)
-
-    mutant_list = [
-        a_i + f * (b_i - c_i) + f * (d_i - e_i)
-        for a_i, b_i, c_i, d_i, e_i in zip(a, b, c, d, e)
-    ]
-
-    return _make_trial(ind, mutant_list, cr, creator)
+    x_rand, a, b = map(lambda x: np.asarray(x, dtype=float), selected)
+    current = np.asarray(ind, dtype=float)
+    mutant = current + f * (x_rand - current) + f * (a - b)
+    return _make_trial(ind, mutant, cr, creator, rng)
 
 
-def de_best_1_bin(ind, population, best, f, cr, creator, toolbox):
+def de_current_to_pbest_1(
+    ind,
+    population,
+    f,
+    cr,
+    creator,
+    rng,
+    pbest_pool=None,
+    p=0.1,
+    **_,
+):
+    """DE/current-to-pbest/1/bin inspired by JADE.
+
+    ``v = current + F (pbest - current) + F (a - b)``
+
+    ``pbest_pool`` should be precomputed once per generation by SaDE, avoiding
+    one complete population sort for every individual.
     """
-    DE/best/1/bin
-    v = best + F * (a - b)
-    """
-    candidates = [
-        x for x in population
-        if x is not ind and x is not best
-    ]
+    if pbest_pool is None:
+        pbest_count = max(2, int(np.ceil(len(population) * p)))
+        pbest_pool = sorted(
+            population, key=lambda individual: individual.fitness.values[0]
+        )[:pbest_count]
 
-    if len(candidates) < 2:
-        return ind
+    valid_pbest = [candidate for candidate in pbest_pool if candidate is not ind]
+    if not valid_pbest:
+        return None
 
-    a, b = toolbox.rnd_selection(candidates, 2)
+    pbest = valid_pbest[int(rng.integers(len(valid_pbest)))]
+    selected = _sample_distinct(population, 2, rng, ind, pbest)
+    if selected is None:
+        return None
 
-    mutant_list = [
-        best_i + f * (a_i - b_i)
-        for best_i, a_i, b_i in zip(best, a, b)
-    ]
-
-    return _make_trial(ind, mutant_list, cr, creator)
-
-
-def de_rand_to_best_2_bin(ind, population, best, f, cr, creator, toolbox):
-    """
-    DE/rand-to-best/2/bin
-
-    Variante implementada:
-    v = best + F * (a - b) + F * (c - d)
-
-    Obs.: é uma estratégia mais agressiva/explotativa.
-    """
-    candidates = [
-        x for x in population
-        if x is not ind and x is not best
-    ]
-
-    if len(candidates) < 4:
-        return ind
-
-    a, b, c, d = toolbox.rnd_selection(candidates, 4)
-
-    mutant_list = [
-        best_i + f * (a_i - b_i) + f * (c_i - d_i)
-        for best_i, a_i, b_i, c_i, d_i in zip(best, a, b, c, d)
-    ]
-
-    return _make_trial(ind, mutant_list, cr, creator)
-
-
-def de_current_to_rand_1(ind, population, f, cr, creator, toolbox):
-    """
-    DE/current-to-rand/1/bin
-
-    Variante com crossover binomial:
-    v = current + F * (x_rand - current) + F * (a - b)
-    """
-    candidates = [x for x in population if x is not ind]
-
-    if len(candidates) < 3:
-        return ind
-
-    x_rand, a, b = toolbox.rnd_selection(candidates, 3)
-
-    mutant_list = [
-        ind_i + f * (x_rand_i - ind_i) + f * (a_i - b_i)
-        for ind_i, x_rand_i, a_i, b_i in zip(ind, x_rand, a, b)
-    ]
-
-    return _make_trial(ind, mutant_list, cr, creator)
-
-
-def de_current_to_pbest_1(ind, population, f, cr, creator, toolbox, p=0.1):
-    """
-    DE/current-to-pbest/1/bin, inspirado no JADE.
-
-    v = current + F * (p_best - current) + F * (a - b)
-    """
-    if len(population) < 4:
-        return ind
-
-    num_p_best = max(1, int(len(population) * p))
-
-    top_p_individuals = sorted(
-        population,
-        key=lambda x: x.fitness.values[0]
-    )[:num_p_best]
-
-    p_best = random.choice(top_p_individuals)
-
-    candidates = [
-        x for x in population
-        if x is not ind and x is not p_best
-    ]
-
-    if len(candidates) < 2:
-        return ind
-
-    a, b = toolbox.rnd_selection(candidates, 2)
-
-    mutant_list = [
-        ind_i + f * (pbest_i - ind_i) + f * (a_i - b_i)
-        for ind_i, pbest_i, a_i, b_i in zip(ind, p_best, a, b)
-    ]
-
-    return _make_trial(ind, mutant_list, cr, creator)
+    a, b = map(lambda x: np.asarray(x, dtype=float), selected)
+    current = np.asarray(ind, dtype=float)
+    pbest_array = np.asarray(pbest, dtype=float)
+    mutant = current + f * (pbest_array - current) + f * (a - b)
+    return _make_trial(ind, mutant, cr, creator, rng)
